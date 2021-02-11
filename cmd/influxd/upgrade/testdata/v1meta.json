@@ -1,0 +1,65 @@
+{
+  "dbrps": [
+    {
+      "db": "test",
+      "default": true,
+      "durationSeconds": 0,
+      "rp": "autogen"
+    },
+    {
+      "db": "_internal",
+      "default": true,
+      "durationSeconds": 604800,
+      "rp": "monitor"
+    },
+    {
+      "db": "mydb",
+      "default": true,
+      "durationSeconds": 0,
+      "rp": "autogen"
+    },
+    {
+      "db": "mydb",
+      "default": false,
+      "durationSeconds": 604800,
+      "rp": "1week"
+    },
+    {
+      "db": "empty",
+      "default": true,
+      "durationSeconds": 0,
+      "rp": "autogen"
+    }
+  ],
+  "users": [
+    {
+      "hash": "$2a$10$CDafirhBo9D73MKfVTHPqu4tfjDezDtVxLBCgvE/pkouSt7XerB1i",
+      "isAdmin": false,
+      "name": "reader",
+      "readDBs": [
+        "mydb"
+      ],
+      "writeDBs": []
+    },
+    {
+      "hash": "$2a$10$LwrSKru66I7cKA3tg7l63O3Msk5yH.VmWQ8ZNK1py98s6MGbKSR9G",
+      "isAdmin": false,
+      "name": "writer",
+      "readDBs": [],
+      "writeDBs": [
+        "mydb"
+      ]
+    },
+    {
+      "hash": "$2a$10$m8nPqKzmXTZccSPhZjn72.REfby.7EEdb5aQFhHjhqH11P/WoDZQG",
+      "isAdmin": false,
+      "name": "readerwriter",
+      "readDBs": [
+        "mydb"
+      ],
+      "writeDBs": [
+        "mydb"
+      ]
+    }
+  ]
+}
