@@ -35,3 +35,17 @@ func (s *AuthedPasswordService) SetPassword(ctx context.Context, authID influxdb
 
 	return s.inner.SetPassword(ctx, authID, password)
 }
+
+// SetPasswordHash overrides the password hash of a known user.
+func (s *AuthedPasswordService) SetPasswordHash(ctx context.Context, authID influxdb.ID, password string) error {
+	auth, err := s.auth.FindAuthorizationByID(ctx, authID)
+	if err != nil {
+		return ErrAuthNotFound
+	}
+
+	if _, _, err := authorizer.AuthorizeWriteResource(ctx, influxdb.UsersResourceType, auth.UserID); err != nil {
+		return err
+	}
+
+	return s.inner.SetPasswordHash(ctx, authID, password)
+}

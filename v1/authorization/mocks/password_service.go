@@ -42,6 +42,14 @@ func (m *MockPasswordService) SetPassword(arg0 context.Context, arg1 influxdb.ID
 	return ret0
 }
 
+// SetPasswordhash mocks base method
+func (m *MockPasswordService) SetPasswordHash(arg0 context.Context, arg1 influxdb.ID, arg2 string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SetPasswordHash", arg0, arg1, arg2)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
 // SetPassword indicates an expected call of SetPassword
 func (mr *MockPasswordServiceMockRecorder) SetPassword(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()

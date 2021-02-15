@@ -11,19 +11,19 @@ import (
 	"github.com/influxdata/influxdb/v2"
 )
 
-// An implementation of influxdb.PasswordsService that will perform
-// ComparePassword requests at a reduced cost under certain
-// conditions. See ComparePassword for further information.
+// CachingPasswordsService is an implementation of influxdb.PasswordsService that will perform
+// ComparePassword requests at a reduced cost under certain conditions. See
+// ComparePassword for further information.
 //
 // The cache is only valid for the duration of the process.
 type CachingPasswordsService struct {
-	inner influxdb.PasswordsService
+	inner PasswordServices
 
 	mu        sync.RWMutex // protects concurrent access to authCache
 	authCache map[influxdb.ID]authUser
 }
 
-func NewCachingPasswordsService(inner influxdb.PasswordsService) *CachingPasswordsService {
+func NewCachingPasswordsService(inner PasswordServices) *CachingPasswordsService {
 	return &CachingPasswordsService{inner: inner, authCache: make(map[influxdb.ID]authUser)}
 }
 
@@ -31,6 +31,16 @@ var _ influxdb.PasswordsService = (*CachingPasswordsService)(nil)
 
 func (c *CachingPasswordsService) SetPassword(ctx context.Context, id influxdb.ID, password string) error {
 	err := c.inner.SetPassword(ctx, id, password)
+	if err == nil {
+		c.mu.Lock()
+		delete(c.authCache, id)
+		c.mu.Unlock()
+	}
+	return err
+}
+
+func (c *CachingPasswordsService) SetPasswordHash(ctx context.Context, id influxdb.ID, hash string) error {
+	err := c.inner.SetPasswordHash(ctx, id, hash)
 	if err == nil {
 		c.mu.Lock()
 		delete(c.authCache, id)

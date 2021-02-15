@@ -26,6 +26,11 @@ type TenantService interface {
 
 type PasswordService interface {
 	SetPassword(ctx context.Context, id influxdb.ID, password string) error
+	SetPasswordHash(ctx context.Context, id influxdb.ID, hash string) error
+}
+type PasswordServices interface {
+	PasswordService // v1 service
+	influxdb.PasswordsService
 }
 
 type AuthHandler struct {
@@ -627,7 +632,8 @@ func (h *AuthHandler) handleDeleteAuthorization(w http.ResponseWriter, r *http.R
 // password APIs
 
 type passwordSetRequest struct {
-	Password string `json:"password"`
+	Password     string `json:"password"`
+	PasswordHash string `json:"passwordHash"`
 }
 
 // handlePutPassword is the HTTP handler for the PUT /private/legacy/authorizations/:id/password
@@ -651,7 +657,11 @@ func (h *AuthHandler) handlePostUserPassword(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	err = h.passwordSvc.SetPassword(r.Context(), *authID, body.Password)
+	if len(body.PasswordHash) == 0 {
+		err = h.passwordSvc.SetPassword(r.Context(), *authID, body.Password)
+	} else {
+		err = h.passwordSvc.SetPasswordHash(r.Context(), *authID, body.PasswordHash)
+	}
 	if err != nil {
 		h.api.Err(w, r, err)
 		return

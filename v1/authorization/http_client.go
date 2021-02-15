@@ -119,3 +119,10 @@ func (s *Client) SetPassword(ctx context.Context, id influxdb.ID, password strin
 		}, prefixAuthorization, id.String(), "password").
 		Do(ctx)
 }
+func (s *Client) SetPasswordHash(ctx context.Context, id influxdb.ID, hash string) error {
+	return s.Client.
+		PostJSON(passwordSetRequest{
+			PasswordHash: hash,
+		}, prefixAuthorization, id.String(), "password").
+		Do(ctx)
+}

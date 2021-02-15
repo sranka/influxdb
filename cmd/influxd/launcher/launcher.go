@@ -674,7 +674,7 @@ func (m *Launcher) run(ctx context.Context, opts *InfluxdOpts) (err error) {
 
 	var (
 		authorizerV1 platform.AuthorizerV1
-		passwordV1   platform.PasswordsService
+		passwordV1   authv1.PasswordService
 		authSvcV1    *authv1.Service
 	)
 	{
@@ -685,12 +685,13 @@ func (m *Launcher) run(ctx context.Context, opts *InfluxdOpts) (err error) {
 		}
 
 		authSvcV1 = authv1.NewService(authStore, ts)
-		passwordV1 = authv1.NewCachingPasswordsService(authSvcV1)
+		passwordSvc := authv1.NewCachingPasswordsService(authSvcV1)
+		passwordV1 = passwordSvc
 
 		authorizerV1 = &authv1.Authorizer{
 			AuthV1:   authSvcV1,
 			AuthV2:   authSvc,
-			Comparer: passwordV1,
+			Comparer: passwordSvc,
 			User:     ts,
 		}
 	}
