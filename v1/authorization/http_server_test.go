@@ -966,3 +966,195 @@ func MustMarshal(o interface{}) []byte {
 	b, _ := json.Marshal(o)
 	return b
 }
+
+func TestService_handlePostPassword(t *testing.T) {
+	type fields struct {
+		AuthorizationService influxdb.AuthorizationService
+		TenantService        TenantService
+	}
+	type args struct {
+		session       *influxdb.Authorization
+		pwdSetRequest *passwordSetRequest
+	}
+	type wants struct {
+		statusCode    int
+		body          string
+		plainPassword string
+	}
+
+	var (
+		defaultFields = fields{
+			AuthorizationService: &mock.AuthorizationService{
+				CreateAuthorizationFn: func(ctx context.Context, c *influxdb.Authorization) error {
+					c.ID = itesting.MustIDBase16("020f755c3c082000")
+					return nil
+				},
+			},
+			TenantService: &tenantService{
+				FindUserByIDFn: func(ctx context.Context, id influxdb.ID) (*influxdb.User, error) {
+					return &influxdb.User{
+						ID:   id,
+						Name: "u1",
+					}, nil
+				},
+				FindOrganizationByIDF: func(ctx context.Context, id influxdb.ID) (*influxdb.Organization, error) {
+					return &influxdb.Organization{
+						ID:   id,
+						Name: "o1",
+					}, nil
+				},
+				FindBucketByIDFn: func(ctx context.Context, id influxdb.ID) (*influxdb.Bucket, error) {
+					return &influxdb.Bucket{
+						ID:   id,
+						Name: "b1",
+					}, nil
+				},
+			},
+		}
+
+		defaultSession = &influxdb.Authorization{
+			Token:       "session-token",
+			ID:          itesting.MustIDBase16("020f755c3c082000"),
+			UserID:      itesting.MustIDBase16("aaaaaaaaaaaaaaaa"),
+			OrgID:       itesting.MustIDBase16("020f755c3c083000"),
+			Description: "can write to authorization resource",
+			Permissions: []influxdb.Permission{
+				{
+					Action: influxdb.WriteAction,
+					Resource: influxdb.Resource{
+						Type:  influxdb.AuthorizationsResourceType,
+						OrgID: itesting.IDPtr(itesting.MustIDBase16("020f755c3c083000")),
+					},
+				},
+			},
+		}
+	)
+
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+		wants  wants
+	}{
+		{
+			name:   "setup a plain password",
+			fields: defaultFields,
+			args: args{
+				session: defaultSession,
+				pwdSetRequest: &passwordSetRequest{
+					Password: "A123456a.",
+				},
+			},
+			wants: wants{
+				statusCode:    http.StatusNoContent,
+				plainPassword: "A123456a.",
+			},
+		},
+		{
+			name:   "setup a short password",
+			fields: defaultFields,
+			args: args{
+				session: defaultSession,
+				pwdSetRequest: &passwordSetRequest{
+					Password: "a",
+				},
+			},
+			wants: wants{
+				statusCode: http.StatusBadRequest,
+				body:       `{"error": "passwords must be at least 8 characters long"}`,
+			},
+		},
+		{
+			name:   "setup a hashed password",
+			fields: defaultFields,
+			args: args{
+				session: defaultSession,
+				pwdSetRequest: &passwordSetRequest{
+					Password: "$2a$10$QXYarFvAitpevbIYXb9I5ekXMnavj.Z.WaV5lh5D9oqqxP.2tLRpa",
+					Hashed:   true,
+				},
+			},
+			wants: wants{
+				statusCode:    http.StatusNoContent,
+				plainPassword: "changeit",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Helper()
+
+			s, _, err := NewTestInmemStore(t)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			storage, err := NewStore(s)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			svc := NewService(storage, tt.fields.TenantService)
+			passwordSvc := NewCachingPasswordsService(svc)
+			testAuthorization := influxdb.Authorization{
+				Status: influxdb.Active,
+				UserID: itesting.MustIDBase16("aaaaaaaaaaaaaaaa"),
+				OrgID:  itesting.MustIDBase16("020f755c3c083000"),
+				Token:  "first:second",
+			}
+			if err := svc.CreateAuthorization(context.Background(), &testAuthorization); err != nil {
+				t.Fatalf("failed to create authorization: %v", err)
+			}
+			handler := NewHTTPAuthHandler(zaptest.NewLogger(t), svc, passwordSvc, tt.fields.TenantService)
+			router := chi.NewRouter()
+			router.Mount(handler.Prefix(), handler)
+
+			b, err := json.Marshal(tt.args.pwdSetRequest)
+			if err != nil {
+				t.Fatalf("failed to marshal password set request: %v", err)
+			}
+
+			r := httptest.NewRequest("POST", "http://any.url", bytes.NewReader(b))
+			r = r.WithContext(context.WithValue(
+				context.Background(),
+				httprouter.ParamsKey,
+				httprouter.Params{
+					{
+						Key:   "userID",
+						Value: fmt.Sprintf("%d", tt.args.session.UserID),
+					},
+				}))
+			w := httptest.NewRecorder()
+
+			ctx := icontext.SetAuthorizer(context.Background(), tt.args.session)
+			r = r.WithContext(ctx)
+			rctx := chi.NewRouteContext()
+			rctx.URLParams.Add("id", testAuthorization.ID.String())
+			r = r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
+
+			handler.handlePostUserPassword(w, r)
+
+			res := w.Result()
+			body, _ := ioutil.ReadAll(res.Body)
+
+			if res.StatusCode != tt.wants.statusCode {
+				t.Logf("headers: %v body: %s", res.Header, body)
+				t.Errorf("%q. handlePostPassword() = %v, want %v", tt.name, res.StatusCode, tt.wants.statusCode)
+			}
+			if tt.wants.plainPassword != "" {
+				if err := svc.ComparePassword(context.Background(), testAuthorization.ID, tt.wants.plainPassword); err != nil {
+					t.Errorf("%q, handlePostPassword() password comparison failed: %v", tt.name, err)
+				}
+
+			}
+			if tt.wants.body != "" {
+				if diff, err := jsonDiff(string(body), tt.wants.body); diff != "" {
+					t.Errorf("%q. handlePostPassword() = ***%s***", tt.name, diff)
+				} else if err != nil {
+					t.Errorf("%q, handlePostPassword() error: %v", tt.name, err)
+				}
+			}
+		})
+	}
+}
