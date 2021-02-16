@@ -632,8 +632,8 @@ func (h *AuthHandler) handleDeleteAuthorization(w http.ResponseWriter, r *http.R
 // password APIs
 
 type passwordSetRequest struct {
-	Password     string `json:"password"`
-	PasswordHash string `json:"passwordHash"`
+	Password string `json:"password"`
+	Hashed   bool   `json:"hashed,omitempty"`
 }
 
 // handlePutPassword is the HTTP handler for the PUT /private/legacy/authorizations/:id/password
@@ -657,10 +657,10 @@ func (h *AuthHandler) handlePostUserPassword(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	if len(body.PasswordHash) == 0 {
-		err = h.passwordSvc.SetPassword(r.Context(), *authID, body.Password)
+	if body.Hashed {
+		err = h.passwordSvc.SetPasswordHash(r.Context(), *authID, body.Password)
 	} else {
-		err = h.passwordSvc.SetPasswordHash(r.Context(), *authID, body.PasswordHash)
+		err = h.passwordSvc.SetPassword(r.Context(), *authID, body.Password)
 	}
 	if err != nil {
 		h.api.Err(w, r, err)
